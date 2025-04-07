@@ -42,7 +42,6 @@ This repository contains scripts to configure automated backups using BorgBackup
      ```bash
      git clone https://github.com/kreutix/borg-backup.git /backup
      cd /backup
-     chmod +x *.sh
      ```
 
 2. **Create the `.env` File**
