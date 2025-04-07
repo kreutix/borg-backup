@@ -18,6 +18,7 @@ This repository contains scripts to configure automated backups using BorgBackup
 - `create_backup.sh`: Main backup script.
 - `create_snapshot.sh`: Creates an LVM snapshot (LVM only).
 - `remove_snapshot.sh`: Removes the LVM snapshot (LVM only).
+- `.env.example`: Example configuration file template.
 
 ## Prerequisites
 
@@ -45,18 +46,18 @@ This repository contains scripts to configure automated backups using BorgBackup
      ```
 
 2. **Create the `.env` File**
-   - Create a `.env` file in `/backup` with the following content:
+   - Copy the example configuration file to create your `.env`:
      ```bash
-     export BORG_PASSPHRASE="your-secure-passphrase"
-     export BORG_REPO=/mnt/storagebox/borg/s1
+     cp .env.example .env
      ```
-   - Replace `your-secure-passphrase` with a strong passphrase.
-   - Optionally, add `export USE_LVM=true` if you want to use LVM snapshots (default is `false` if not set).
+   - Edit the `.env` file and adjust the settings:
+     - **Required**: Replace `your-secure-passphrase` with a strong passphrase.
+     - **Optional (LVM)**: Uncomment and adjust the LVM variables if enabling snapshots. Defaults to no LVM (`USE_LVM=false`) if unset.
+     - **Note**: If `USE_LVM=true`, all LVM variables must be set, or the script will fail with an error.
    - Secure the file:
      ```bash
      chmod 600 /backup/.env
      ```
-   - The `borg.sh` and `create_backup.sh` scripts source this file automatically.
 
 3. **Mount the Remote Storage Box**
    - Create a credentials file for the CIFS mount:
@@ -111,18 +112,20 @@ By default, the backup runs directly on the root filesystem (`/`) without LVM sn
 This setup uses LVM snapshots for a consistent backup of the root filesystem.
 
 1. **Verify LVM Setup**
-   - Ensure your root filesystem (`/`) is on an LVM volume (e.g., `/dev/vg0/root`).
-   - Check with:
-     ```bash
-     lvs
-     ```
-   - Adjust `create_snapshot.sh` and `remove_snapshot.sh` if your volume group or logical volume names differ.
+   - Ensure your root filesystem is on an LVM volume (check with `lvs`).
+   - Update the `LVM_VG`, `LVM_LV`, `LVM_SNAPSHOT_NAME`, `LVM_SNAPSHOT_SIZE`, and `LVM_MOUNT_POINT` variables in `.env` to match your system.
 
 2. **Configure `.env`**
-   - Add the following line to `/backup/.env`:
+   - Uncomment and adjust the LVM settings in `/backup/.env`, e.g.:
      ```bash
      export USE_LVM=true
+     export LVM_VG=vg0
+     export LVM_LV=root
+     export LVM_SNAPSHOT_NAME=root.snapshot
+     export LVM_SNAPSHOT_SIZE=10G
+     export LVM_MOUNT_POINT=/backup/root.snapshot
      ```
+   - Ensure `LVM_MOUNT_POINT` is a dedicated directory not used by other processes.
 
 3. **Test the Setup**
    - Manually run the backup script:
@@ -137,7 +140,7 @@ This setup uses LVM snapshots for a consistent backup of the root filesystem.
 ## Notes
 
 - **Default (No LVM)**: Backups run directly on `/` if `USE_LVM` is `false` or not set. This is simpler but may include inconsistent data if files change during the backup.
-- **With LVM**: Snapshots ensure filesystem consistency but require sufficient free space in the volume group. Set `USE_LVM=true`.
+- **With LVM**: Snapshots ensure filesystem consistency but require sufficient free space in the volume group. Set `USE_LVM=true` and configure all LVM variables.
 - **Security**: Keep the `.env` file and CIFS credentials secure.
 - **Logs**: Cron job output is emailed to the root user by default. Redirect output to a file if needed (e.g., `>> /var/log/backup.log 2>&1`).
 
@@ -145,4 +148,4 @@ This setup uses LVM snapshots for a consistent backup of the root filesystem.
 
 - **Mount Issues**: Verify the CIFS mount with `mount | grep /mnt/storagebox`.
 - **Borg Errors**: Check the passphrase and repository path in `.env`.
-- **LVM Errors**: Ensure enough free space exists (`vgdisplay`) and `USE_LVM` is set correctly.
+- **LVM Errors**: Ensure enough free space exists (`vgdisplay`) and all LVM variables in `.env` are set correctly.

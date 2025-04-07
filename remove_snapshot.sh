@@ -4,7 +4,7 @@
 source /backup/.env
 
 # Unmount the snapshot
-umount "$LVM_MOUNT_POINT"
+umount "$LVM_MOUNT_POINT" || exit 1
 
 # Remove the LVM snapshot
-/sbin/lvremove -f "$LVM_VOLUME"-"$LVM_SNAPSHOT_NAME"
+/sbin/lvremove -f "/dev/$LVM_VG/$LVM_SNAPSHOT_NAME" || exit 1
