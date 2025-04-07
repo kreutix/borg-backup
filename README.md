@@ -6,7 +6,7 @@ This repository contains scripts to configure automated backups using BorgBackup
 
 - **Backup Tool**: BorgBackup (encrypted, deduplicated backups)
 - **Schedule**: Daily at 3:00 AM (configurable via cron)
-- **Storage**: Remote storage box mounted at `/mnt/storagebox`
+- **Storage**: Remote storage box mounted at `/mnt/storagebox/borg/<BACKUP_NAME>`
 - **Snapshot (Optional)**: LVM snapshot of the root filesystem (enabled with `USE_LVM=true`)
 - **Retention**: Keeps 30 daily backups
 - **Scripts**: Provided in this repository
@@ -65,20 +65,22 @@ This repository contains scripts to configure automated backups using BorgBackup
      echo "password=your-password" >> /etc/storagebox-credentials.txt
      chmod 600 /etc/storagebox-credentials.txt
      ```
-   - Add the following line to `/etc/fstab` (replace `<STORAGEBOX_ID>` with your storage box ID):
+   - Add the following line to `/etc/fstab` (replace `<STORAGEBOX_ID>` with your storage box ID and `<BACKUP_NAME>` with your backup name from `.env`):
      ```
-     //<STORAGEBOX_ID>.your-storagebox.de/backup /mnt/storagebox cifs credentials=/etc/storagebox-credentials.txt,uid=0,gid=0,file_mode=0660,dir_mode=0770,iocharset=utf8,rw 0 0
+     //<STORAGEBOX_ID>.your-storagebox.de/backup/borg/<BACKUP_NAME> /mnt/storagebox/borg/<BACKUP_NAME> cifs credentials=/etc/storagebox-credentials.txt,uid=0,gid=0,file_mode=0660,dir_mode=0770,iocharset=utf8,rw 0 0
      ```
-   - Mount the storage:
+   - Source the `.env` file and mount the storage:
      ```bash
-     mkdir -p /mnt/storagebox
-     mount /mnt/storagebox
+     source /backup/.env
+     mkdir -p "/mnt/storagebox/borg/${BACKUP_NAME}"
+     mount "/mnt/storagebox/borg/${BACKUP_NAME}"
      ```
 
 4. **Initialize the Borg Repository**
    - Source the `.env` file and initialize the repository:
      ```bash
      source /backup/.env
+     mkdir -p "$BORG_REPO"
      /backup/borg.sh init --encryption=repokey
      ```
 
@@ -142,9 +144,11 @@ This setup uses LVM snapshots for a consistent backup of the root filesystem.
 - **With LVM**: Snapshots ensure filesystem consistency but require sufficient free space in the volume group. Set `USE_LVM=true` and configure all LVM variables.
 - **Security**: Keep the `.env` file and CIFS credentials secure.
 - **Logs**: Cron job output is emailed to the root user by default. Redirect output to a file if needed (e.g., `>> /var/log/backup.log 2>&1`).
+- **Backup Name**: The `BACKUP_NAME` variable in `.env` determines the name of your backup and its location at `/mnt/storagebox/borg/<BACKUP_NAME>`. Change this to create separate backup repositories.
 
 ## Troubleshooting
 
 - **Mount Issues**: Verify the CIFS mount with `mount | grep /mnt/storagebox`.
 - **Borg Errors**: Check the passphrase and repository path in `.env`.
 - **LVM Errors**: Ensure enough free space exists (`vgdisplay`) and all LVM variables in `.env` are set correctly.
+- **Repository Path**: Ensure the `BACKUP_NAME` variable is set correctly and the corresponding directory exists at `/mnt/storagebox/borg/<BACKUP_NAME>`.
