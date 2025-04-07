@@ -1,6 +1,6 @@
 # Backup Configuration Guide
 
-This repository contains scripts to configure automated backups using BorgBackup. By default, it backs up the live root filesystem directly. Optionally, it can use Logical Volume Manager (LVM) snapshots for consistency. Backups are scheduled via cron and stored on a remote storage box mounted via CIFS.
+This repository contains scripts to configure automated backups using BorgBackup. It backs up the root filesystem (`/`) via a temporary mount point. Optionally, it can use Logical Volume Manager (LVM) snapshots for consistency. Backups are scheduled via cron and stored on a remote storage box mounted via CIFS.
 
 ## Overview
 
@@ -18,6 +18,8 @@ This repository contains scripts to configure automated backups using BorgBackup
 - `create_backup.sh`: Main backup script.
 - `create_snapshot.sh`: Creates an LVM snapshot (LVM only).
 - `remove_snapshot.sh`: Removes the LVM snapshot (LVM only).
+- `create_bind_mount.sh`: Creates a bind mount of `/` (no LVM).
+- `remove_bind_mount.sh`: Removes the bind mount (no LVM).
 - `.env.example`: Example configuration file template.
 
 ## Prerequisites
@@ -51,8 +53,8 @@ This repository contains scripts to configure automated backups using BorgBackup
      ```
    - Edit the `.env` file and adjust the settings:
      - **Required**: Replace `your-secure-passphrase` with a strong passphrase.
-     - **Optional (LVM)**: Uncomment and adjust the LVM variables if enabling snapshots. Defaults to no LVM (`USE_LVM=false`) if unset.
-     - **Note**: If `USE_LVM=true`, all LVM variables must be set, or the script will fail with an error.
+     - **Optional (LVM)**: Uncomment and adjust the LVM variables if enabling snapshots. Defaults to bind mount if `USE_LVM` is unset or `false`.
+     - **Note**: If `USE_LVM=true`, all LVM variables must be set. Ensure `BIND_MOUNT_POINT` and `LVM_MOUNT_POINT` are dedicated directories.
    - Secure the file:
      ```bash
      chmod 600 /backup/.env
@@ -80,7 +82,6 @@ This repository contains scripts to configure automated backups using BorgBackup
    - Source the `.env` file and initialize the repository:
      ```bash
      source /backup/.env
-     mkdir -p "$BORG_REPO"
      /backup/borg.sh init --encryption=repokey
      ```
 
@@ -94,9 +95,9 @@ This repository contains scripts to configure automated backups using BorgBackup
      0 3 * * * /backup/create_backup.sh
      ```
 
-### Default Setup (No LVM)
+### Default Setup (Bind Mount)
 
-By default, the backup runs directly on the root filesystem (`/`) without LVM snapshots (`USE_LVM` is `false` or unset).
+By default, the backup uses a bind mount of `/` at `$BIND_MOUNT_POINT` (e.g., `/backup/root.bind`) to exclude mounted filesystems like `/mnt` or `/proc`.
 
 1. **Test the Setup**
    - Manually run the backup script:
@@ -110,11 +111,11 @@ By default, the backup runs directly on the root filesystem (`/`) without LVM sn
 
 ### Optional Setup with LVM
 
-This setup uses LVM snapshots for a consistent backup of the root filesystem.
+This setup uses an LVM snapshot for a consistent backup of the root filesystem.
 
 1. **Verify LVM Setup**
    - Ensure your root filesystem is on an LVM volume (check with `lvs`).
-   - Update the `LVM_VG`, `LVM_LV`, `LVM_SNAPSHOT_NAME`, `LVM_SNAPSHOT_SIZE`, and `LVM_MOUNT_POINT` variables in `.env` to match your system.
+   - Update the LVM variables in `.env` to match your system.
 
 2. **Configure `.env`**
    - Uncomment and adjust the LVM settings in `/backup/.env`, e.g.:
@@ -126,7 +127,6 @@ This setup uses LVM snapshots for a consistent backup of the root filesystem.
      export LVM_SNAPSHOT_SIZE=10G
      export LVM_MOUNT_POINT=/backup/root.snapshot
      ```
-   - Ensure `LVM_MOUNT_POINT` is a dedicated directory not used by other processes.
 
 3. **Test the Setup**
    - Manually run the backup script:
@@ -138,17 +138,20 @@ This setup uses LVM snapshots for a consistent backup of the root filesystem.
      /backup/borg.sh list
      ```
 
+## Stopping the Backup
+- **Manual Run**: Press `Ctrl+C` to stop `create_backup.sh`. It will attempt to clean up the bind mount or snapshot.
+- **Cron Job**: Find the PID with `ps aux | grep create_backup.sh` and run `kill <PID>`. For stubborn processes, use `kill -9 <PID>`.
+- **Cleanup**: If interrupted, manually unmount with `umount $BIND_MOUNT_POINT` (no LVM) or `umount $LVM_MOUNT_POINT; lvremove -f /dev/$LVM_VG/$LVM_SNAPSHOT_NAME` (LVM).
+
 ## Notes
 
-- **Default (No LVM)**: Backups run directly on `/` if `USE_LVM` is `false` or not set. This is simpler but may include inconsistent data if files change during the backup.
+- **Default (Bind Mount)**: Uses a bind mount of `/` to back up only the root filesystem, excluding `/mnt`, `/dev`, etc.
 - **With LVM**: Snapshots ensure filesystem consistency but require sufficient free space in the volume group. Set `USE_LVM=true` and configure all LVM variables.
 - **Security**: Keep the `.env` file and CIFS credentials secure.
 - **Logs**: Cron job output is emailed to the root user by default. Redirect output to a file if needed (e.g., `>> /var/log/backup.log 2>&1`).
-- **Backup Name**: The `BACKUP_NAME` variable in `.env` determines the name of your backup and its location at `/mnt/storagebox/borg/<BACKUP_NAME>`. Change this to create separate backup repositories.
 
 ## Troubleshooting
 
 - **Mount Issues**: Verify the CIFS mount with `mount | grep /mnt/storagebox`.
 - **Borg Errors**: Check the passphrase and repository path in `.env`.
 - **LVM Errors**: Ensure enough free space exists (`vgdisplay`) and all LVM variables in `.env` are set correctly.
-- **Repository Path**: Ensure the `BACKUP_NAME` variable is set correctly and the corresponding directory exists at `/mnt/storagebox/borg/<BACKUP_NAME>`.
